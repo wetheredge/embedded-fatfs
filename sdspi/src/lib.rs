@@ -3,7 +3,7 @@
 #![no_std]
 
 use aligned::Aligned;
-use core::fmt::Debug;
+use core::fmt::{Debug, Display};
 use core::future::Future;
 use core::marker::PhantomData;
 use embassy_futures::select::{select, Either};
@@ -57,16 +57,79 @@ impl Card {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[non_exhaustive]
 pub enum Error {
+    // #[error("failed to set chip select")]
     ChipSelect,
+    // #[error("spi communication failed")]
     SpiError,
+    // #[error("timed out")]
     Timeout,
+    // #[error("unsupported card")]
     UnsupportedCard,
+    // #[error("command 58 error")]
     Cmd58Error,
+    // #[error("command 59 error")]
     Cmd59Error,
+    // #[error("unexpected register value: {0}")]
     RegisterError(u8),
+    // #[error("got crc {0}, expected {1}")]
     CrcMismatch(u16, u16),
+    // #[error("not initialized")]
     NotInitialized,
+    // #[error("write failed")]
     WriteError,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::ChipSelect => f.write_str("failed to set chip select"),
+            Self::SpiError => f.write_str("spi communication failed"),
+            Self::Timeout => f.write_str("timed out"),
+            Self::UnsupportedCard => f.write_str("unsupported card"),
+            Self::Cmd58Error => f.write_str("command 58 error"),
+            Self::Cmd59Error => f.write_str("command 59 error"),
+            Self::RegisterError(value) => {
+                f.write_str("unexpected register value: ")?;
+                Display::fmt(value, f)
+            },
+            Self::CrcMismatch(got, expected) => {
+                f.write_str("got crc ")?;
+                Display::fmt(got, f)?;
+                f.write_str(", expected ")?;
+                Display::fmt(expected, f)
+            },
+            Self::NotInitialized => f.write_str("not initialized"),
+            Self::WriteError => f.write_str("write failed"),
+        }
+    }
+}
+
+impl core::error::Error for Error {}
+
+#[cfg(feature = "embedded-io-async-06")]
+impl embedded_io_async_06::Error for Error {
+    fn kind(&self) -> embedded_io_async_06::ErrorKind {
+        use embedded_io_async_06::ErrorKind;
+
+        match self {
+            Self::Timeout => ErrorKind::TimedOut,
+            Self::UnsupportedCard => ErrorKind::Unsupported,
+            _ => ErrorKind::Other,
+        }
+    }
+}
+
+#[cfg(feature = "embedded-io-async-07")]
+impl embedded_io_async_07::Error for Error {
+    fn kind(&self) -> embedded_io_async_07::ErrorKind {
+        use embedded_io_async_07::ErrorKind;
+
+        match self {
+            Self::Timeout => ErrorKind::TimedOut,
+            Self::UnsupportedCard => ErrorKind::Unsupported,
+            _ => ErrorKind::Other,
+        }
+    }
 }
 
 /// Must be called between powerup and [SdSpi::init] to ensure the sdcard is properly initialized.
